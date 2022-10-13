@@ -25,4 +25,17 @@ jobs:
         run: docker build -t $IMAGE_NAME .
 
       - name: Scan the image
+        id: vuln-scan
         run: ./twistcli images scan --address ${{ secrets.PCC_CONSOLE_URL }} --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --details $IMAGE_NAME
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v2
+        # Results are generated only on a success or failure
+        # this is required since GitHub by default won't run the next step
+        # when the previous one has failed.
+        # And alternative it to add `continue-on-error: true` to the previous step
+        if: success() || failure()
+        with:
+          # The SARIF Log file name is configurable on scan action
+          # therefore the file name is best read from the steps output
+          sarif_file: ${{ steps.vuln-scan.outputs.iac_scan_result_sarif_path }}
