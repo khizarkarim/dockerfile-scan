@@ -1,12 +1,11 @@
 name: Prisma Cloud Compute Image Scan
 
-on: [push, pull_request]
+on: [ push, workflow_dispatch, pull_request ]
 
 env:
   IMAGE_NAME: ${{ github.repository }}:${{ github.sha }}
 
 jobs:
-  # Jobs are ran independently from each other, so build and scan needs to be in a single job.
   build-and-scan:
     name: Build and scan image
     runs-on: ubuntu-latest
@@ -14,35 +13,69 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v2
-        # Defaults are sufficient generally
-        # https://github.com/actions/checkout#usage
 
-      - name: Download twistcli from the Prisma Cloud Compute Console
-        run: |
-          curl --user ${{ secrets.PCC_USER }}:${{ secrets.PCC_PASS }} --output ./twistcli ${{ secrets.PCC_CONSOLE_URL }}/api/v1/util/twistcli
-          chmod a+x ./twistcli
       - name: Build the image
         run: docker build -t $IMAGE_NAME .
 
-      - name: Scan the image
-        id: vuln-scan
-        run: ./twistcli images scan --address ${{ secrets.PCC_CONSOLE_URL }} --output-file results.sarif --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --details $IMAGE_NAME
-
-      - name: Expose report
-        uses: actions/upload-artifact@v2
+      - name: Prisma Cloud image scan
+        id: scan
+        uses: PaloAltoNetworks/prisma-cloud-scan@v1
         with:
-          name: SARIF results
-          path: results.sarif
+          pcc_console_url: ${{ secrets.PCC_CONSOLE_URL }}
+          pcc_user: ${{ secrets.PCC_USER }}
+          pcc_pass: ${{ secrets.PCC_PASS }}
+          image_name: ${{ env.IMAGE_NAME }}
 
+      # (Optional) for compatibility with GitHub's code scanning alerts
       - name: Upload SARIF file
+        if: ${{ always() }} # necessary if using failure thresholds in the image scan
         uses: github/codeql-action/upload-sarif@v2
-        # Results are generated only on a success or failure
-        # this is required since GitHub by default won't run the next step
-        # when the previous one has failed.
-        # And alternative it to add `continue-on-error: true` to the previous step
-        if: success() || failure()
         with:
-          sarif_file: results.sarif
-          # The SARIF Log file name is configurable on scan action
-          # therefore the file name is best read from the steps output
-#           sarif_file: ${{ steps.vuln-scan.outputs.iac_scan_result_sarif_path }}
+          sarif_file: ${{ steps.scan.outputs.sarif_file }}
+
+# on: [push, pull_request]
+
+# env:
+#   IMAGE_NAME: ${{ github.repository }}:${{ github.sha }}
+
+# jobs:
+#   # Jobs are ran independently from each other, so build and scan needs to be in a single job.
+#   build-and-scan:
+#     name: Build and scan image
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Check out the repository
+#         uses: actions/checkout@v2
+#         # Defaults are sufficient generally
+#         # https://github.com/actions/checkout#usage
+
+#       - name: Download twistcli from the Prisma Cloud Compute Console
+#         run: |
+#           curl --user ${{ secrets.PCC_USER }}:${{ secrets.PCC_PASS }} --output ./twistcli ${{ secrets.PCC_CONSOLE_URL }}/api/v1/util/twistcli
+#           chmod a+x ./twistcli
+#       - name: Build the image
+#         run: docker build -t $IMAGE_NAME .
+
+#       - name: Scan the image
+#         id: vuln-scan
+#         run: ./twistcli images scan --address ${{ secrets.PCC_CONSOLE_URL }} --output-file results.sarif --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --details $IMAGE_NAME
+
+#       - name: Expose report
+#         uses: actions/upload-artifact@v2
+#         with:
+#           name: SARIF results
+#           path: results.sarif
+
+#       - name: Upload SARIF file
+#         uses: github/codeql-action/upload-sarif@v2
+#         # Results are generated only on a success or failure
+#         # this is required since GitHub by default won't run the next step
+#         # when the previous one has failed.
+#         # And alternative it to add `continue-on-error: true` to the previous step
+#         if: success() || failure()
+#         with:
+#           sarif_file: results.sarif
+#           # The SARIF Log file name is configurable on scan action
+#           # therefore the file name is best read from the steps output
+# #           sarif_file: ${{ steps.vuln-scan.outputs.iac_scan_result_sarif_path }}
