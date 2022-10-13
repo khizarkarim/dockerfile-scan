@@ -26,7 +26,13 @@ jobs:
 
       - name: Scan the image
         id: vuln-scan
-        run: ./twistcli images scan --address ${{ secrets.PCC_CONSOLE_URL }} --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --details $IMAGE_NAME
+        run: ./twistcli images scan --address ${{ secrets.PCC_CONSOLE_URL }} --output-file results.sarif --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --details $IMAGE_NAME
+
+      - name: Expose report
+        uses: actions/upload-artifact@v2
+        with:
+          name: SARIF results
+          path: results.sarif
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v2
@@ -36,6 +42,7 @@ jobs:
         # And alternative it to add `continue-on-error: true` to the previous step
         if: success() || failure()
         with:
+          sarif_file: results.sarif
           # The SARIF Log file name is configurable on scan action
           # therefore the file name is best read from the steps output
-          sarif_file: ${{ steps.vuln-scan.outputs.iac_scan_result_sarif_path }}
+#           sarif_file: ${{ steps.vuln-scan.outputs.iac_scan_result_sarif_path }}
